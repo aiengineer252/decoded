@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" fill="#07090c" />
+  <!-- the credibility gauge, reduced to its smallest legible form -->
+  <path
+    d="M 14 44 A 22 22 0 0 1 50 44"
+    fill="none"
+    stroke="#232d38"
+    stroke-width="7"
+    stroke-linecap="round"
+  />
+  <path
+    d="M 14 44 A 22 22 0 0 1 40 23"
+    fill="none"
+    stroke="#ffb020"
+    stroke-width="7"
+    stroke-linecap="round"
+  />
+  <circle cx="40" cy="23" r="5" fill="#ffb020" />
+</svg>
