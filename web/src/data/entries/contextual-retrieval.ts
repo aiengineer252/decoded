@@ -396,7 +396,7 @@ for chunk in chunks:
         evidence: [
           {
             claim:
-              'Reductions in top-k retrieval failure rate are reported, ablated across contextual embeddings, contextual BM25, and reranking.',
+              'Top-20-chunk retrieval failure rate falls 35% with contextual embeddings alone (5.7% -> 3.7%), 49% adding contextual BM25 (-> 2.9%), and 67% adding reranking (-> 1.9%). Cleanly ablated, which is more than most write-ups manage.',
             url: 'https://www.anthropic.com/news/contextual-retrieval',
           },
           {
