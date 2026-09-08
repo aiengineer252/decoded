@@ -1,0 +1,95 @@
+name: Pipeline
+
+# Free scheduling. GitHub-hosted runners are free for public repos, and private
+# repos get a monthly minute allowance this workflow uses a tiny fraction of.
+#
+# Deliberately does NOT publish. It ingests, scores, triages, and opens a pull
+# request containing the result. A human still has to look at it and merge —
+# which is the whole trust claim of the site, and the reason this is a PR and
+# not a push to main.
+on:
+  schedule:
+    # 06:00 UTC every Monday. Cron on GitHub is best-effort and can run late
+    # when the platform is busy; nothing here is time-sensitive.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      triage_limit:
+        description: 'How many items to triage (each one costs money)'
+        required: false
+        default: '3'
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements.txt
+
+      - name: Install
+        working-directory: api
+        run: pip install -r requirements.txt
+
+      - name: Ingest
+        working-directory: api
+        env:
+          # Raises the GitHub API limit from 60/hr to 5000/hr. Automatically
+          # provided by Actions — nothing to configure.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m app.cli ingest
+
+      - name: Triage
+        working-directory: api
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m app.cli triage --limit ${{ github.event.inputs.triage_limit || 3 }}
+
+      - name: Show what it cost
+        working-directory: api
+        run: python -m app.cli stats
+
+      # Exports reviewed entries only. On a fresh run this is usually empty,
+      # because triage output lands as `auto` and needs approving first.
+      - name: Export reviewed entries
+        working-directory: api
+        run: python -m app.cli export --out ../web/src/data/generated-entries.json
+
+      - name: Typecheck the site with the new data
+        working-directory: web
+        run: |
+          npm ci
+          npx tsc -b --noEmit
+
+      - name: Open a review PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: pipeline/run
+          title: 'Pipeline run: new entries for review'
+          commit-message: 'Pipeline run: ingest + triage'
+          body: |
+            Automated pipeline run.
+
+            **Do not merge without reading it.** Triaged entries land as
+            `auto` and are only exported once approved, so this PR usually
+            contains raw pipeline output for you to check rather than
+            publishable entries.
+
+            Check before merging:
+            - Does the mechanism match the real source?
+            - Is every evidence URL real, and does it support its claim?
+            - Does the credibility score match its own factors?
+          delete-branch: true

@@ -6,6 +6,7 @@ import { contextualRetrieval } from './entries/contextual-retrieval'
 import { hnsw } from './entries/hnsw'
 import { zeroShotClassification } from './entries/zero-shot-classification'
 import { flashAttention } from './entries/flash-attention'
+import generated from './generated-entries.json'
 
 /**
  * Seed entries, hand-authored to pin down the format before the pipeline
@@ -14,7 +15,12 @@ import { flashAttention } from './entries/flash-attention'
  *
  * Once api/ is live this module is replaced by a fetch from /entries.
  */
-export const entries: Entry[] = [
+/**
+ * Hand-authored seed entries, written to pin down the format before the
+ * pipeline wrote into it. Every one is marked `status: 'demo'` and the site
+ * says so — a truth engine that fakes its own first entries is dead on arrival.
+ */
+const seeds: Entry[] = [
   flashAttention,
   hnsw,
   contextualRetrieval,
@@ -22,6 +28,21 @@ export const entries: Entry[] = [
   speculativeDecoding,
   mcp,
   grpo,
+]
+
+/**
+ * Entries produced by the pipeline and approved by a human reviewer, written
+ * here by `python -m app.cli export`. The file is committed, so the site stays
+ * fully static and makes no model calls at read time.
+ *
+ * A generated entry wins over a seed with the same slug, so replacing a
+ * hand-written entry with a pipeline one is just a matter of publishing it.
+ */
+const generatedEntries = generated as unknown as Entry[]
+
+export const entries: Entry[] = [
+  ...generatedEntries,
+  ...seeds.filter((s) => !generatedEntries.some((g) => g.slug === s.slug)),
 ]
 
 export function getEntry(slug: string): Entry | undefined {
