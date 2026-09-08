@@ -83,11 +83,15 @@ def main() -> int:
                 json.dumps([r.payload for r in rows], indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-            print(f"wrote {len(rows)} entries -> {out}")
+            print(f"wrote {len(rows)} entries ({'+'.join(statuses)}) -> {out}")
             if not rows:
                 # plain ASCII: Windows consoles default to cp1252 and mangle
                 # anything else, which makes CI logs unreadable
-                print("  (nothing reviewed yet - approve entries first)")
+                print(
+                    "  (nothing triaged yet)"
+                    if args.include_auto
+                    else "  (nothing reviewed yet - approve entries first)"
+                )
 
         elif args.cmd == "queue":
             rows = (

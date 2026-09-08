@@ -145,6 +145,22 @@ export default function EntryPage() {
         </div>
       )}
 
+      {/* Defensive: an `auto` entry should never reach the site, because the
+          export step ships reviewed entries only. If one does, the reader is
+          told rather than served unverified output silently. */}
+      {entry.status === 'auto' && (
+        <div className="rounded-lg border border-[var(--sig-unproven)]/50 bg-[var(--sig-unproven)]/5 px-5 py-4">
+          <p className="text-[0.94rem] leading-relaxed text-[var(--txt-dim)]">
+            <span className="font-mono font-semibold text-[var(--sig-unproven)]">
+              not yet reviewed —{' '}
+            </span>
+            this entry is raw pipeline output. No human has checked that the mechanism matches the
+            source, that the evidence links support their claims, or that the code was quoted rather
+            than reconstructed. Read it with that in mind.
+          </p>
+        </div>
+      )}
+
       {scoreDrift && (
         <div className="rounded-lg border border-[var(--sig-hype)]/50 bg-[var(--sig-hype)]/5 px-5 py-3 font-mono text-[0.9rem] font-semibold text-[var(--sig-hype)]">
           score drift: stored {entry.verdict.score}, factors compute to {recomputed}

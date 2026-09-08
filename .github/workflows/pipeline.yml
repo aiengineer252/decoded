@@ -1,23 +1,22 @@
 name: Pipeline
 
 # Free scheduling. GitHub-hosted runners are free for public repos, and private
-# repos get a monthly minute allowance this workflow uses a tiny fraction of.
+# repos get a monthly minute allowance this uses a tiny fraction of.
 #
-# Deliberately does NOT publish. It ingests, scores, triages, and opens a pull
-# request containing the result. A human still has to look at it and merge —
-# which is the whole trust claim of the site, and the reason this is a PR and
-# not a push to main.
+# This workflow deliberately CANNOT publish. It ingests, scores, triages, and
+# opens a pull request containing the raw triage output for a human to read.
+# Publishing is a separate, deliberate act (see the PR body). That is the whole
+# trust claim of the site, so the robot does not get to do it.
 on:
   schedule:
-    # 06:00 UTC every Monday. Cron on GitHub is best-effort and can run late
-    # when the platform is busy; nothing here is time-sensitive.
+    # 06:00 UTC every Monday. GitHub cron is best-effort and can run late.
     - cron: '0 6 * * 1'
   workflow_dispatch:
     inputs:
       triage_limit:
         description: 'How many items to triage (each one costs money)'
         required: false
-        default: '3'
+        default: '1'
 
 concurrency:
   group: pipeline
@@ -39,6 +38,27 @@ jobs:
           cache: pip
           cache-dependency-path: api/requirements.txt
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # The SQLite file holds which items have already been seen and triaged.
+      # It is gitignored, so without this the runner starts empty every week,
+      # re-ingests everything, and pays to re-triage the same top item forever.
+      #
+      # Caveat: unused caches are evicted after 7 days, and this runs weekly —
+      # so a miss is possible. A miss is not dangerous, just wasteful: it costs
+      # one duplicate triage, bounded by triage_limit.
+      - name: Restore pipeline state
+        uses: actions/cache@v4
+        with:
+          path: api/decoded.db
+          key: decoded-db-${{ github.run_id }}
+          restore-keys: |
+            decoded-db-
+
       - name: Install
         working-directory: api
         run: pip install -r requirements.txt
@@ -46,8 +66,8 @@ jobs:
       - name: Ingest
         working-directory: api
         env:
-          # Raises the GitHub API limit from 60/hr to 5000/hr. Automatically
-          # provided by Actions — nothing to configure.
+          # Raises the GitHub API limit from 60/hr to 5000/hr. Provided
+          # automatically by Actions — nothing for you to configure.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python -m app.cli ingest
 
@@ -56,15 +76,21 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -m app.cli triage --limit ${{ github.event.inputs.triage_limit || 3 }}
+        run: python -m app.cli triage --limit ${{ github.event.inputs.triage_limit || 1 }}
 
-      - name: Show what it cost
+      - name: Report token spend
         working-directory: api
         run: python -m app.cli stats
 
-      # Exports reviewed entries only. On a fresh run this is usually empty,
-      # because triage output lands as `auto` and needs approving first.
-      - name: Export reviewed entries
+      # Two separate files, on purpose:
+      #   review/pending.json          — raw triage output, for a human to read
+      #   web/src/data/generated-*.json — reviewed only, what the site serves
+      # Merging this PR does not publish anything. See the PR body.
+      - name: Export triage output for review
+        working-directory: api
+        run: python -m app.cli export --include-auto --out ../review/pending.json
+
+      - name: Export approved entries for the site
         working-directory: api
         run: python -m app.cli export --out ../web/src/data/generated-entries.json
 
@@ -78,18 +104,24 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           branch: pipeline/run
-          title: 'Pipeline run: new entries for review'
+          title: 'Pipeline run: entries awaiting review'
           commit-message: 'Pipeline run: ingest + triage'
           body: |
-            Automated pipeline run.
+            Automated run. **Merging this does not publish anything.**
 
-            **Do not merge without reading it.** Triaged entries land as
-            `auto` and are only exported once approved, so this PR usually
-            contains raw pipeline output for you to check rather than
-            publishable entries.
+            `review/pending.json` is raw pipeline output. The site only reads
+            `web/src/data/generated-entries.json`, which contains reviewed
+            entries only.
 
-            Check before merging:
-            - Does the mechanism match the real source?
-            - Is every evidence URL real, and does it support its claim?
-            - Does the credibility score match its own factors?
+            ### To publish an entry
+            Move its object from `review/pending.json` into
+            `web/src/data/generated-entries.json` and set `"status": "reviewed"`.
+            That edit is the approval, and git records who made it.
+
+            ### Check before you do that
+            - Does the mechanism match the real source, or was it inferred?
+            - Is every evidence URL real, and does it support the claim next to it?
+            - Does the credibility score match its own factors? (The site prints a
+              drift warning if not, but catch it here.)
+            - Are the code snippets actually quoted, or reconstructed?
           delete-branch: true

@@ -39,6 +39,11 @@ export default function FeedCard({ entry }: { entry: Entry }) {
                 seed
               </span>
             )}
+            {entry.status === 'auto' && (
+              <span className="rounded border border-[var(--sig-unproven)]/60 bg-[var(--sig-unproven)]/10 px-2 py-0.5 font-mono text-[0.62rem] font-semibold tracking-widest text-[var(--sig-unproven)] uppercase">
+                unreviewed
+              </span>
+            )}
           </div>
 
           <p className="mt-2 text-[0.98rem] leading-relaxed text-[var(--txt-dim)]">
