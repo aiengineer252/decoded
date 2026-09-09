@@ -230,6 +230,45 @@ body::before {
   }
 }
 
+/* Walkthrough callout: drops in just under the line it explains. */
+@keyframes callout-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.callout-in {
+  animation: callout-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Walkthrough autoplay rail: the active segment fills over the dwell time. */
+@keyframes fill-rail {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+/* A chapter heading that draws its rule in as it scrolls into view. */
+@keyframes rule-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.rule-in {
+  transform-origin: left;
+  animation: rule-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @keyframes shimmer {
   to {
     background-position: 200% 0;

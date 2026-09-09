@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ArchNode, Architecture, NodeKind } from '../../types'
-import CodeBlock from '../CodeBlock'
+import { useReadingLevel } from '../../lib/readingLevel'
+import CodeWalkthrough from '../CodeWalkthrough'
 
-const W = 212
-const H = 88
+const W = 226
+const H = 108
 const GAP_X = 92
-const GAP_Y = 40
+const GAP_Y = 44
 const PAD = 20
 
 const KIND_COLOR: Record<NodeKind, string> = {
@@ -26,20 +27,28 @@ const KIND_GLYPH: Record<NodeKind, string> = {
   control: '?',
 }
 
+/** Plain-English name for each box type, for readers who do not know the jargon. */
+const KIND_PLAIN: Record<NodeKind, string> = {
+  input: 'where data comes in',
+  compute: 'does work on the data',
+  store: 'holds data',
+  model: 'a neural network',
+  output: 'what comes out',
+  control: 'makes a decision',
+}
+
 interface Props {
   architecture: Architecture
 }
 
 export default function ArchitectureView({ architecture }: Props) {
   const { nodes, edges, flow, caption } = architecture
+  const { level } = useReadingLevel()
   const [selected, setSelected] = useState<string | null>(null)
   const [playing, setPlaying] = useState(true)
   const [pulseIdx, setPulseIdx] = useState(0)
   const detailRef = useRef<HTMLDivElement>(null)
 
-  // The pulse walks the happy path so the diagram reads as a system in motion,
-  // not a static picture. Pausing is one click away for readers who find
-  // movement distracting.
   useEffect(() => {
     if (!playing || flow.length === 0) return
     const t = setInterval(() => setPulseIdx((i) => (i + 1) % flow.length), 1000)
@@ -69,7 +78,6 @@ export default function ArchitectureView({ architecture }: Props) {
     const x1 = b.x
     const y1 = b.y + H / 2
 
-    // Backwards edge (a feedback loop): route it under the row.
     if (x1 < x0) {
       const dip = Math.max(a.y, b.y) + H + GAP_Y * 0.6
       return `M ${a.x + W / 2} ${a.y + H} C ${a.x + W / 2} ${dip}, ${b.x + W / 2} ${dip}, ${b.x + W / 2} ${b.y + H}`
@@ -81,6 +89,8 @@ export default function ArchitectureView({ architecture }: Props) {
   const flowIndex = (id: string) => flow.indexOf(id)
   const isFlowEdge = (fromId: string, toId: string) =>
     flowIndex(fromId) >= 0 && flowIndex(toId) === flowIndex(fromId) + 1
+
+  const stepOf = (id: string) => flowIndex(id)
 
   return (
     <div className="space-y-5">
@@ -96,6 +106,15 @@ export default function ArchitectureView({ architecture }: Props) {
         </button>
       </div>
 
+      {level === 'beginner' && (
+        <p className="rise rounded-lg border border-[var(--line)] bg-[var(--bg-raised)] px-4 py-3 text-[0.94rem] leading-relaxed text-[var(--txt-dim)]">
+          <span className="font-semibold text-[var(--txt)]">How to read this: </span>
+          each box is one part of the system. Data flows left to right along the arrows — the moving
+          dots show the main path. The small number in a box&apos;s corner is its order on that path.
+          Click any box for a plain explanation and, where we have it, the real code.
+        </p>
+      )}
+
       <div className="panel relative overflow-x-auto rounded-lg p-1">
         <svg
           width={width}
@@ -105,31 +124,14 @@ export default function ArchitectureView({ architecture }: Props) {
           style={{ maxWidth: '100%' }}
         >
           <defs>
-            <marker
-              id="arrow"
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
-            >
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line-hi)" />
             </marker>
-            <marker
-              id="arrow-hot"
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
-            >
+            <marker id="arrow-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--amber)" />
             </marker>
           </defs>
 
-          {/* edges */}
           {edges.map((e, i) => {
             const from = byId.get(e.from)
             const to = byId.get(e.to)
@@ -149,21 +151,11 @@ export default function ArchitectureView({ architecture }: Props) {
                   className={hot ? 'edge-flowing' : undefined}
                   opacity={hot ? 1 : 0.8}
                 />
-
-                {/* A packet travelling the happy path. This is the single cue
-                    that says "data moves through here, in this direction" —
-                    it answers the reader's first question before they ask. */}
                 {playing && onFlow && (
                   <circle r={4.5} fill="var(--amber)" opacity={0.95}>
-                    <animateMotion
-                      dur="2.4s"
-                      repeatCount="indefinite"
-                      path={d}
-                      begin={`${flowIndex(e.from) * 0.35}s`}
-                    />
+                    <animateMotion dur="2.4s" repeatCount="indefinite" path={d} begin={`${flowIndex(e.from) * 0.35}s`} />
                   </circle>
                 )}
-
                 {e.label && (
                   <text
                     className="font-mono"
@@ -181,12 +173,13 @@ export default function ArchitectureView({ architecture }: Props) {
             )
           })}
 
-          {/* nodes */}
           {nodes.map((n) => {
             const p = pos(n)
             const color = KIND_COLOR[n.kind]
             const isActive = playing && n.id === activeId
             const isSelected = n.id === selected
+            const [s1, s2] = wrap2(n.summary, 30)
+            const order = stepOf(n.id)
             return (
               <g
                 key={n.id}
@@ -194,57 +187,46 @@ export default function ArchitectureView({ architecture }: Props) {
                 onClick={() => {
                   setSelected((s) => (s === n.id ? null : n.id))
                   setPlaying(false)
-                  setTimeout(
-                    () => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
-                    60,
-                  )
+                  setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60)
                 }}
                 style={{ cursor: 'pointer' }}
-                className="transition-opacity"
               >
                 <rect
                   width={W}
                   height={H}
-                  rx={7}
+                  rx={8}
                   fill={isSelected ? 'var(--panel-hi)' : 'var(--bg-raised)'}
                   stroke={isSelected || isActive ? color : 'var(--line-hi)'}
                   strokeWidth={isSelected ? 2.2 : 1.3}
                   style={{
-                    filter:
-                      isActive || isSelected ? `drop-shadow(0 0 14px ${color}55)` : undefined,
+                    filter: isActive || isSelected ? `drop-shadow(0 0 14px ${color}55)` : undefined,
                     transition: 'stroke .25s ease, filter .25s ease',
                   }}
                 />
                 <rect width={4} height={H} rx={2} fill={color} opacity={isSelected ? 1 : 0.8} />
 
-                <text
-                  x={15}
-                  y={23}
-                  className="font-mono"
-                  fontSize={10.5}
-                  fontWeight={700}
-                  letterSpacing="0.14em"
-                  fill={color}
-                >
+                <text x={15} y={22} className="font-mono" fontSize={10.5} fontWeight={700} letterSpacing="0.14em" fill={color}>
                   {KIND_GLYPH[n.kind]} {n.kind.toUpperCase()}
                 </text>
+
+                {/* order badge: where this box sits on the main path */}
+                {order >= 0 && (
+                  <g transform={`translate(${W - 26} 9)`}>
+                    <rect width={18} height={18} rx={9} fill={isActive ? 'var(--amber)' : 'var(--panel-hi)'} stroke={isActive ? 'var(--amber)' : 'var(--line-hi)'} />
+                    <text x={9} y={13} textAnchor="middle" className="font-mono" fontSize={10} fontWeight={700} fill={isActive ? '#07090c' : 'var(--txt-dim)'}>
+                      {order + 1}
+                    </text>
+                  </g>
+                )}
+
                 <text x={15} y={47} fontSize={15.5} fill="var(--txt)" fontWeight={600}>
-                  {truncate(n.label, 21)}
+                  {truncate(n.label, 22)}
                 </text>
-                <text x={15} y={68} fontSize={12.5} fill="var(--txt-dim)">
-                  {truncate(n.summary, 27)}
-                </text>
+                <text x={15} y={69} fontSize={12.5} fill="var(--txt-dim)">{s1}</text>
+                {s2 && <text x={15} y={87} fontSize={12.5} fill="var(--txt-dim)">{s2}</text>}
 
                 {n.code && (
-                  <text
-                    x={W - 13}
-                    y={23}
-                    textAnchor="end"
-                    className="font-mono"
-                    fontSize={11}
-                    fontWeight={700}
-                    fill={isSelected ? color : 'var(--txt-faint)'}
-                  >
+                  <text x={W - 34} y={H - 12} textAnchor="end" className="font-mono" fontSize={11} fontWeight={700} fill={isSelected ? color : 'var(--txt-faint)'}>
                     {'{ }'}
                   </text>
                 )}
@@ -259,16 +241,14 @@ export default function ArchitectureView({ architecture }: Props) {
         {(Object.keys(KIND_COLOR) as NodeKind[])
           .filter((k) => nodes.some((n) => n.kind === k))
           .map((k) => (
-            <span
-              key={k}
-              className="flex items-center gap-2 font-mono text-[0.78rem] text-[var(--txt-dim)]"
-            >
+            <span key={k} className="flex items-center gap-2 font-mono text-[0.78rem] text-[var(--txt-dim)]">
               <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: KIND_COLOR[k] }} />
               {k}
+              {level === 'beginner' && <span className="text-[var(--txt-faint)]">— {KIND_PLAIN[k]}</span>}
             </span>
           ))}
         <span className="ml-auto font-mono text-[0.78rem] text-[var(--txt-faint)]">
-          <span className="text-[var(--amber)]">{'{ }'}</span> = code available
+          <span className="text-[var(--amber)]">{'{ }'}</span> = real code inside
         </span>
       </div>
 
@@ -280,10 +260,13 @@ export default function ArchitectureView({ architecture }: Props) {
               <div>
                 <div className="label mb-1.5" style={{ color: KIND_COLOR[selectedNode.kind] }}>
                   {selectedNode.kind}
+                  {level === 'beginner' && <span className="text-[var(--txt-faint)]"> · {KIND_PLAIN[selectedNode.kind]}</span>}
                 </div>
                 <h4 className="text-[1.5rem] leading-tight font-semibold">{selectedNode.label}</h4>
-                <p className="mt-2 max-w-3xl text-[1rem] leading-relaxed text-[var(--txt-dim)]">
-                  {selectedNode.detail ?? selectedNode.summary}
+                <p key={level} className="rise mt-2 max-w-3xl text-[1.02rem] leading-relaxed text-[var(--txt-dim)]">
+                  {level === 'beginner' && selectedNode.plain
+                    ? selectedNode.plain
+                    : (selectedNode.detail ?? selectedNode.summary)}
                 </p>
               </div>
               <button
@@ -295,14 +278,7 @@ export default function ArchitectureView({ architecture }: Props) {
             </div>
 
             {selectedNode.code ? (
-              <CodeBlock
-                code={selectedNode.code.snippet}
-                lang={selectedNode.code.lang}
-                file={selectedNode.code.file}
-                url={selectedNode.code.url}
-                focus={selectedNode.code.focus}
-                maxHeight={380}
-              />
+              <CodeWalkthrough code={selectedNode.code} maxHeight={440} />
             ) : (
               <p className="rounded border border-dashed border-[var(--line)] px-4 py-3 font-mono text-[0.86rem] text-[var(--txt-faint)]">
                 No code extracted for this component — it is described in prose in the source only.
@@ -310,12 +286,7 @@ export default function ArchitectureView({ architecture }: Props) {
             )}
 
             {selectedNode.sourceUrl && (
-              <a
-                href={selectedNode.sourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="underline-grow inline-block font-mono text-[0.86rem] font-semibold text-[var(--amber)]"
-              >
+              <a href={selectedNode.sourceUrl} target="_blank" rel="noreferrer" className="underline-grow inline-block font-mono text-[0.86rem] font-semibold text-[var(--amber)]">
                 verify this claim &rarr;
               </a>
             )}
@@ -323,8 +294,13 @@ export default function ArchitectureView({ architecture }: Props) {
         ) : (
           <div className="rounded-lg border border-dashed border-[var(--line-hi)] px-4 py-8 text-center">
             <p className="font-mono text-[0.9rem] text-[var(--txt-dim)]">
-              <span className="text-[var(--amber)]">&uarr;</span> select any node above to expand its
-              implementation
+              <span className="text-[var(--amber)]">&uarr;</span> click any box above to open it — start with{' '}
+              <button
+                onClick={() => { setSelected(flow[0]); setPlaying(false) }}
+                className="underline-grow font-semibold text-[var(--amber)]"
+              >
+                {byId.get(flow[0])?.label ?? 'the first one'}
+              </button>
             </p>
           </div>
         )}
@@ -335,4 +311,14 @@ export default function ArchitectureView({ architecture }: Props) {
 
 function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s
+}
+
+/** Break a summary into at most two lines of roughly `n` chars on word boundaries. */
+function wrap2(s: string, n: number): [string, string | null] {
+  if (s.length <= n) return [s, null]
+  const cut = s.lastIndexOf(' ', n)
+  const at = cut > n * 0.5 ? cut : n
+  const first = s.slice(0, at).trim()
+  const rest = s.slice(at).trim()
+  return [first, rest.length > n ? rest.slice(0, n - 1) + '…' : rest]
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Architecture, ExecutionTrace, TraceValue } from '../../types'
-import CodeBlock from '../CodeBlock'
+import { useReadingLevel } from '../../lib/readingLevel'
+import CodeWalkthrough from '../CodeWalkthrough'
 
 interface Props {
   trace: ExecutionTrace
@@ -13,6 +14,7 @@ interface Props {
  * it and shows the intermediate value at every stage.
  */
 export default function TraceView({ trace, architecture }: Props) {
+  const { level } = useReadingLevel()
   const [step, setStep] = useState(0)
   const [running, setRunning] = useState(false)
   const last = trace.steps.length - 1
@@ -48,6 +50,14 @@ export default function TraceView({ trace, architecture }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="max-w-2xl text-[1rem] leading-relaxed text-[var(--txt-dim)]">
           {trace.caption ?? 'One real input, stepped through the system stage by stage.'}
+          {level === 'beginner' && (
+            <span className="mt-1.5 block text-[0.92rem] text-[var(--txt-faint)]">
+              Think of it as a debugger: press &ldquo;run&rdquo; and watch one example travel
+              through each part. The <span className="font-mono">in</span> and{' '}
+              <span className="font-mono">out</span> boxes show the actual data before and after
+              each step.
+            </span>
+          )}
         </p>
 
         <div className="flex items-center gap-2">
@@ -182,8 +192,8 @@ export default function TraceView({ trace, architecture }: Props) {
               )}
             </div>
             <h4 className="mt-2 text-[1.5rem] leading-tight font-semibold">{current.label}</h4>
-            <p className="mt-2.5 text-[1rem] leading-relaxed text-[var(--txt-dim)]">
-              {current.note}
+            <p key={level} className="rise mt-2.5 text-[1.02rem] leading-relaxed text-[var(--txt-dim)]">
+              {level === 'beginner' && current.plain ? current.plain : current.note}
             </p>
           </div>
 
@@ -192,16 +202,7 @@ export default function TraceView({ trace, architecture }: Props) {
             <ValuePanel title="out" value={current.output} accent />
           </div>
 
-          {current.code && (
-            <CodeBlock
-              code={current.code.snippet}
-              lang={current.code.lang}
-              file={current.code.file}
-              url={current.code.url}
-              focus={current.code.focus}
-              maxHeight={340}
-            />
-          )}
+          {current.code && <CodeWalkthrough code={current.code} maxHeight={400} />}
         </div>
       </div>
 

@@ -81,6 +81,22 @@ export type NodeKind =
   | 'output'
   | 'control'
 
+/**
+ * One stop on a guided walk through a code snippet. The reader steps from stop
+ * to stop; the lines light up and the note explains what they do and why it
+ * matters. This replaces "here are five lines, good luck" with a tour.
+ */
+export interface WalkthroughStop {
+  /** 1-indexed lines in `snippet` that this stop is about. */
+  lines: number[]
+  /** Three to six words. Shown as the stop's name. */
+  title: string
+  /** What these lines do, and the non-obvious thing about them. */
+  note: string
+  /** Simpler phrasing for the beginner level. Falls back to `note`. */
+  plain?: string
+}
+
 export interface CodeRef {
   lang: 'python' | 'typescript' | 'json' | 'bash' | 'text'
   /** Where this came from, so a reader can go check it. */
@@ -89,6 +105,12 @@ export interface CodeRef {
   snippet: string
   /** 1-indexed lines to highlight inside `snippet`. */
   focus?: number[]
+  /**
+   * Guided tour through the snippet, in reading order. When present, the code
+   * renders as a stepper rather than a static block. Prefer a snippet large
+   * enough to have context — a whole function, not the interesting line alone.
+   */
+  walkthrough?: WalkthroughStop[]
 }
 
 export interface ArchNode {
@@ -102,6 +124,8 @@ export interface ArchNode {
   summary: string
   /** The long version, revealed when the node is expanded. */
   detail?: string
+  /** Beginner-level version of `detail`: no jargon, an analogy is fine. */
+  plain?: string
   code?: CodeRef
   /** Where the claim in `summary` can be verified. */
   sourceUrl?: string
@@ -143,6 +167,8 @@ export interface TraceStep {
   label: string
   /** What actually happens in this step, in one or two sentences. */
   note: string
+  /** Beginner-level version of `note`. Falls back to `note` when absent. */
+  plain?: string
   input?: TraceValue
   output?: TraceValue
   code?: CodeRef
@@ -244,6 +270,19 @@ export interface Entry {
   reviewedBy?: string
   sources: Source[]
 
+  /**
+   * The opener everyone reads regardless of level. Learning starts from a
+   * felt problem, not from a mechanism — nobody cares how the fix works until
+   * they recognise the thing it fixes.
+   */
+  problem: {
+    /** The situation before this existed, concrete enough to recognise. */
+    before: string
+    /** The one-sentence idea. If it needs two sentences it is not the idea yet. */
+    insight: string
+    /** What you can do afterwards that you could not do before. */
+    payoff: string
+  }
   /** The same thing explained at three levels of assumed background. */
   explainer: Explainer
   /** What you should already understand to get value from this entry. */

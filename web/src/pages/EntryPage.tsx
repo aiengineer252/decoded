@@ -5,32 +5,59 @@ import type { EntryView } from '../types'
 import { GaugeChip } from '../components/Gauge'
 import EntryBrief from '../components/EntryBrief'
 import Freshness from '../components/Freshness'
+import StartHere from '../components/StartHere'
 import ArchitectureView from '../components/views/ArchitectureView'
 import TraceView from '../components/views/TraceView'
 import DisplacementView from '../components/views/DisplacementView'
 import VerdictView from '../components/views/VerdictView'
 import { computeScore } from '../lib/credibility'
 
-const VIEWS: { key: EntryView; label: string; hint: string; next: string }[] = [
+/**
+ * The four views are four chapters of one argument, so each carries what the
+ * reader is about to learn and what they will know when they finish. The
+ * progression is fixed: what it is -> what it does -> what it changes -> whether
+ * to trust it. A reader who jumps around still gets the framing.
+ */
+const VIEWS: {
+  key: EntryView
+  label: string
+  hint: string
+  learn: string
+  takeaway: string
+  next: string
+}[] = [
   {
     key: 'architecture',
     label: 'architecture',
     hint: 'what it is made of',
+    learn: 'The parts of the system and how data moves between them. Click a box to open it — each one carries an explanation and, where we have it, a guided walk through the real code.',
+    takeaway: 'You can now name the parts, and you know which one holds the actual idea.',
     next: 'Now watch one real input go through it',
   },
   {
     key: 'trace',
     label: 'trace',
     hint: 'what it does to one real input',
+    learn: 'One concrete example pushed through the system, step by step, showing the real data at every stage. This is the chapter that turns "I get the idea" into "I could explain it".',
+    takeaway: 'You have seen the mechanism run on a real value, and you know what the numbers look like at each stage.',
     next: 'Now see what it replaces',
   },
   {
     key: 'displacement',
     label: 'displacement',
     hint: 'what it replaces',
+    learn: 'The code you write today next to the code you would write with this, line by line. Then the two lists that matter: what goes away, and what you now pay instead.',
+    takeaway: 'You know what this would remove from your stack, what it would not, and what the bill looks like.',
     next: 'Now the verdict — is it real?',
   },
-  { key: 'verdict', label: 'verdict', hint: 'is it real', next: '' },
+  {
+    key: 'verdict',
+    label: 'verdict',
+    hint: 'is it real',
+    learn: 'Five factors, each with its evidence attached, combined into one score you can recompute — or re-weight — yourself.',
+    takeaway: 'You can defend a yes or a no on this with sources, not vibes.',
+    next: '',
+  },
 ]
 
 export default function EntryPage() {
@@ -167,6 +194,11 @@ export default function EntryPage() {
         </div>
       )}
 
+      <div className="space-y-3">
+        <span className="label">start here</span>
+        <StartHere entry={entry} />
+      </div>
+
       <EntryBrief entry={entry} />
 
       <nav className="sticky top-[108px] z-20 -mx-4 border-y border-[var(--line)] bg-[var(--bg)]/95 px-4 backdrop-blur-md sm:-mx-6 sm:px-6">
@@ -222,11 +254,35 @@ export default function EntryPage() {
         </div>
       </nav>
 
-      <div key={view} className="rise">
+      <div key={view} className="rise space-y-6">
+        {/* chapter opener */}
+        <div className="flex gap-4">
+          <div className="mt-1 h-auto w-1 shrink-0 rounded-full bg-[var(--amber)] rule-in" style={{ transformOrigin: 'top' }} />
+          <div>
+            <span className="label">
+              chapter {index + 1} of 4 · in this chapter
+            </span>
+            <p className="mt-1.5 max-w-3xl text-[1.02rem] leading-relaxed text-[var(--txt-dim)]">
+              {VIEWS[index].learn}
+            </p>
+          </div>
+        </div>
+
         {view === 'architecture' && <ArchitectureView architecture={entry.architecture} />}
         {view === 'trace' && <TraceView trace={entry.trace} architecture={entry.architecture} />}
         {view === 'displacement' && <DisplacementView displacement={entry.displacement} />}
         {view === 'verdict' && <VerdictView verdict={entry.verdict} />}
+
+        {/* chapter close — what the reader now has, before the handoff */}
+        <div className="flex gap-3 rounded-lg border border-[var(--sig-real)]/35 bg-[var(--sig-real)]/5 px-5 py-4">
+          <span className="mt-0.5 font-mono font-bold text-[var(--sig-real)]">x</span>
+          <div>
+            <span className="label" style={{ color: 'var(--sig-real)' }}>
+              you now know
+            </span>
+            <p className="mt-1 text-[0.98rem] leading-relaxed text-[var(--txt)]">{VIEWS[index].takeaway}</p>
+          </div>
+        </div>
       </div>
 
       {/* Forward motion. Four views only read as one argument if the page
