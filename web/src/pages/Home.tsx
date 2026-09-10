@@ -3,6 +3,8 @@ import FeedCard from '../components/FeedCard'
 import DisplacementMap from '../components/DisplacementMap'
 import ValueProp from '../components/ValueProp'
 import ReadingLevelPicker from '../components/ReadingLevelPicker'
+import DecodeText from '../components/DecodeText'
+import { useReveal } from '../lib/useReveal'
 import { sortedEntries } from '../data'
 import type { Category } from '../types'
 
@@ -22,15 +24,31 @@ export default function Home() {
       : filtered
   }, [all, cat, sort])
 
+  useReveal([cat, sort])
+
   return (
     <div className="space-y-10">
       <section className="max-w-4xl">
+        <p className="label mb-4 flex items-center gap-2.5">
+          <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-[var(--amber)]" />
+          decoded · {all.length} entries traced to source
+        </p>
+
         <h1 className="text-[2.6rem] leading-[1.12] font-bold tracking-tight sm:text-[3.2rem]">
           Every AI launch, traced down to{' '}
-          <span className="text-[var(--amber)]">what it actually does</span> — and what it makes
-          obsolete.
+          <DecodeText
+            as="span"
+            text="what it actually does"
+            duration={1100}
+            className="text-[var(--amber)]"
+          />{' '}
+          — and what it makes obsolete.
         </h1>
-        <p className="mt-5 text-[1.15rem] leading-relaxed text-[var(--txt-dim)]">
+
+        <p
+          data-reveal
+          className="mt-5 text-[1.15rem] leading-relaxed text-[var(--txt-dim)]"
+        >
           Not a summary. Each entry is an interactive breakdown you step through: the architecture
           with its real code, a concrete input traced stage by stage, a line-by-line diff against
           the thing it replaces, and a credibility score where every point is click-to-verify.
@@ -58,9 +76,9 @@ export default function Home() {
             </div>
           </div>
 
-          <div key={`${cat}-${sort}`} className="stagger space-y-4">
+          <div key={`${cat}-${sort}`} data-reveal-stagger className="space-y-4">
             {shown.map((e, i) => (
-              <div key={e.slug} style={{ '--i': i } as React.CSSProperties}>
+              <div key={e.slug} data-reveal style={{ '--i': i } as React.CSSProperties}>
                 <FeedCard entry={e} />
               </div>
             ))}

@@ -6,6 +6,9 @@ import { GaugeChip } from '../components/Gauge'
 import EntryBrief from '../components/EntryBrief'
 import Freshness from '../components/Freshness'
 import StartHere from '../components/StartHere'
+import DecodeText from '../components/DecodeText'
+import { useReveal } from '../lib/useReveal'
+import { scrollTo } from '../lib/smoothScroll'
 import ArchitectureView from '../components/views/ArchitectureView'
 import TraceView from '../components/views/TraceView'
 import DisplacementView from '../components/views/DisplacementView'
@@ -95,6 +98,11 @@ export default function EntryPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // Re-scan for reveal targets whenever the entry or chapter changes — each
+  // chapter mounts its own content. Must sit above the early return below:
+  // hooks cannot be called conditionally.
+  useReveal([slug, view])
+
   if (!entry) {
     return (
       <div className="py-24 text-center">
@@ -123,7 +131,12 @@ export default function EntryPage() {
 
       <header className="space-y-4">
         <div className="flex flex-wrap items-center gap-4">
-          <h1 className="text-[2.6rem] leading-[1.1] font-bold tracking-tight">{entry.name}</h1>
+          <DecodeText
+            as="h1"
+            text={entry.name}
+            duration={800}
+            className="text-[2.6rem] leading-[1.1] font-bold tracking-tight"
+          />
           <GaugeChip score={entry.verdict.score} />
           {entry.status === 'demo' && (
             <span className="rounded border border-[var(--line-hi)] px-2.5 py-1 font-mono text-[0.72rem] font-semibold tracking-widest text-[var(--txt-faint)] uppercase">
@@ -196,6 +209,7 @@ export default function EntryPage() {
 
       <div className="space-y-3">
         <span className="label">start here</span>
+        <span data-reveal="rule" className="block h-px w-full bg-[var(--line-hi)]" />
         <StartHere entry={entry} />
       </div>
 
@@ -212,29 +226,31 @@ export default function EntryPage() {
                 onClick={() => go(v.key)}
                 className="group relative shrink-0 px-4 py-4 text-left transition-colors"
               >
-                <span className="flex items-center gap-2.5">
+                <span className="flex items-baseline gap-2.5">
+                  {/* Zero-padded chapter numeral, wide-tracked — the numbering
+                      convention the reference sites use to make a set of
+                      sections read as one sequence. */}
                   <span
-                    className="flex h-6 w-6 items-center justify-center rounded-full font-mono text-[0.72rem] font-bold transition-all duration-300"
+                    className="font-mono text-[0.78rem] font-bold tabular-nums transition-all duration-400"
                     style={{
-                      background: active
+                      color: active
                         ? 'var(--amber)'
                         : visited
-                          ? 'transparent'
-                          : 'var(--bg-raised)',
-                      color: active ? '#07090c' : visited ? 'var(--sig-real)' : 'var(--txt-faint)',
-                      border: `1px solid ${active ? 'var(--amber)' : visited ? 'var(--sig-real)' : 'var(--line-hi)'}`,
+                          ? 'var(--sig-real)'
+                          : 'var(--txt-faint)',
+                      letterSpacing: active ? '0.24em' : '0.14em',
                     }}
                   >
-                    {visited && !active ? 'x' : i + 1}
+                    {String(i + 1).padStart(2, '0')}
                   </span>
                   <span
-                    className="font-mono text-[0.94rem] font-bold tracking-wider uppercase transition-colors"
+                    className="font-mono text-[0.94rem] font-bold tracking-wider uppercase transition-colors duration-300"
                     style={{ color: active ? 'var(--amber)' : 'var(--txt-dim)' }}
                   >
                     {v.label}
                   </span>
                 </span>
-                <span className="mt-1 block pl-8.5 text-[0.8rem] text-[var(--txt-faint)]">
+                <span className="mt-1 block pl-7 text-[0.8rem] text-[var(--txt-faint)]">
                   {v.hint}
                 </span>
               </button>
@@ -291,7 +307,9 @@ export default function EntryPage() {
         <button
           onClick={() => {
             go(nextView.key)
-            window.scrollTo({ top: 260, behavior: 'smooth' })
+            // Through the helper, not window.scrollTo: native `behavior:
+            // 'smooth'` and Lenis both animate scroll and fight each other.
+            scrollTo(260)
           }}
           className="lift group flex w-full items-center justify-between rounded-lg border border-[var(--line-hi)] bg-[var(--panel)] px-6 py-5 text-left hover:border-[var(--amber)]"
         >

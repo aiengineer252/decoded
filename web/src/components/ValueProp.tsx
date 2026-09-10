@@ -54,12 +54,18 @@ export default function ValueProp() {
         </p>
       </div>
 
-      <div className="stagger grid gap-4 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
+      <div data-reveal-stagger className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
         {PROMISES.map((p, i) => (
           <div
             key={p.k}
+            data-reveal
+            onPointerMove={(e) => {
+              const r = e.currentTarget.getBoundingClientRect()
+              e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`)
+              e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`)
+            }}
             style={{ '--i': i } as React.CSSProperties}
-            className="lift panel group rounded-lg p-5 hover:border-[var(--line-hi)]"
+            className="lift tilt panel group relative overflow-hidden rounded-lg p-5 hover:border-[var(--line-hi)]"
           >
             <span className="font-mono text-[0.78rem] font-bold tracking-widest text-[var(--amber)]">
               {p.k}

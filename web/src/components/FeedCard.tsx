@@ -9,7 +9,13 @@ export default function FeedCard({ entry }: { entry: Entry }) {
   return (
     <Link
       to={`/entry/${entry.slug}`}
-      className="lift group panel block rounded-lg p-5 hover:border-[var(--line-hi)] hover:bg-[var(--panel-hi)]"
+      onPointerMove={(e) => {
+        // Feed the sheen gradient the pointer position, in element space.
+        const r = e.currentTarget.getBoundingClientRect()
+        e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`)
+        e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`)
+      }}
+      className="lift tilt group panel relative block overflow-hidden rounded-lg p-5 hover:border-[var(--line-hi)] hover:bg-[var(--panel-hi)]"
     >
       <div className="flex items-start gap-5">
         {/* score block */}
