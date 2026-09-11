@@ -266,7 +266,12 @@ function ValuePanel({
           {value?.type ?? '—'}
         </span>
       </div>
-      <pre className="max-h-64 overflow-auto px-3.5 py-3 font-mono text-[0.86rem] leading-relaxed whitespace-pre-wrap text-[var(--code-plain)]">
+      {/* keyed on the value so it re-mounts and re-lights whenever the step
+          changes — the eye goes to what actually moved */}
+      <pre
+        key={value?.preview}
+        className={`max-h-64 overflow-auto px-3.5 py-3 font-mono text-[0.86rem] leading-relaxed whitespace-pre-wrap text-[var(--code-plain)] ${accent ? 'value-land' : ''}`}
+      >
         {value?.preview ?? '—'}
         {value?.truncated && <span className="text-[var(--txt-faint)]">{'\n… truncated'}</span>}
       </pre>

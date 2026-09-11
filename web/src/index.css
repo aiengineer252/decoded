@@ -334,42 +334,163 @@ body::before {
    attribute only once it has an observer ready. If the script never runs,
    nothing is hidden and the page reads normally. */
 
-[data-reveal][data-reveal-armed] {
-  opacity: 0;
-  transform: translateY(22px);
+/* The transition lives on the base rule, and every hiding rule carries
+   :not([data-revealed]). Consequence: the hidden state stops applying the
+   instant the element is revealed, rather than needing a competing rule to
+   out-specify it. If a transition never progresses — throttled tab, no
+   compositing — the element is simply visible. Content can never get stuck
+   behind motion that did not run. */
+[data-reveal] {
   transition:
     opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
     filter 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-reveal][data-reveal-armed]:not([data-revealed]) {
+  opacity: 0;
+  transform: translateY(22px);
   filter: blur(3px);
 }
 
-[data-reveal='left'][data-reveal-armed] {
+[data-reveal='left'][data-reveal-armed]:not([data-revealed]) {
   transform: translate3d(-26px, 0, 0);
 }
-[data-reveal='scale'][data-reveal-armed] {
+[data-reveal='scale'][data-reveal-armed]:not([data-revealed]) {
   transform: scale(0.965);
 }
-[data-reveal='rule'][data-reveal-armed] {
+[data-reveal='rule'] {
+  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-reveal='rule'][data-reveal-armed]:not([data-revealed]) {
   opacity: 1;
   filter: none;
   transform: scaleX(0);
   transform-origin: left;
-  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-[data-reveal][data-revealed] {
-  opacity: 1;
-  transform: none;
-  filter: none;
-}
-[data-reveal='rule'][data-revealed] {
-  transform: scaleX(1);
 }
 
 /* Stagger children of a revealed group by index. */
 [data-reveal-stagger] > * {
   transition-delay: calc(var(--i, 0) * 85ms);
+}
+
+/* ===================================================================== *
+ * Architecture graph: assembles itself
+ *
+ * The single highest-value motion on the site. A diagram that appears
+ * fully formed is a picture; one that builds along the data path tells
+ * you the order things happen in before you have read a single label.
+ *
+ * Deliberately driven by CSS transitions rather than rAF: transitions
+ * still complete in a throttled or backgrounded tab, and the base state
+ * here is the *finished* state, so a graph can never be left half-drawn.
+ * ===================================================================== */
+
+.arch-edge {
+  transition:
+    stroke-dashoffset 0.85s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.5s ease,
+    stroke 0.3s ease;
+}
+
+/* Transform only — deliberately no opacity. The nodes carry every label on
+   the diagram, so if a transition ever stalls (throttled tab, stalled
+   compositor) the worst case is a box rendered slightly small rather than a
+   diagram with no text in it. The edges below can afford to fade; the words
+   cannot. */
+.arch-node {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Armed and not yet revealed = about to build: edges retracted, nodes
+   shrunk. Same :not([data-revealed]) discipline as the generic reveals —
+   the finished graph is the default, so a blank diagram is not a state
+   this can fall into. */
+[data-reveal='graph'][data-reveal-armed]:not([data-revealed]) .arch-edge {
+  stroke-dashoffset: 1;
+  opacity: 0;
+}
+[data-reveal='graph'][data-reveal-armed]:not([data-revealed]) .arch-node {
+  transform: scale(0.94);
+}
+
+/* Hover focus: everything not connected to the hovered node recedes, so
+   "what talks to what" is answered by looking rather than by tracing
+   lines with a finger. */
+.arch-dim {
+  opacity: 0.16 !important;
+  transition:
+    opacity 0.32s ease,
+    filter 0.32s ease;
+  filter: saturate(0.3);
+}
+
+/* ===================================================================== *
+ * Chapter transitions
+ *
+ * Moving between the four views is an event, not a swap. The numeral
+ * sweeps through as the new chapter arrives — the benxrun convention of
+ * making the section number part of the choreography.
+ * ===================================================================== */
+
+@keyframes chapter-numeral {
+  0% {
+    opacity: 0;
+    transform: translate3d(-14%, 0, 0) scale(0.96);
+    letter-spacing: 0.4em;
+  }
+  22% {
+    opacity: 0.14;
+  }
+  70% {
+    opacity: 0.07;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(6%, 0, 0) scale(1.04);
+    letter-spacing: 0.18em;
+  }
+}
+.chapter-numeral {
+  animation: chapter-numeral 1.15s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes chapter-sweep {
+  0% {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  48% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  52% {
+    transform: scaleX(1);
+    transform-origin: right;
+  }
+  100% {
+    transform: scaleX(0);
+    transform-origin: right;
+  }
+}
+.chapter-sweep {
+  animation: chapter-sweep 0.85s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+/* A value that has just changed, briefly lit. Used on trace outputs so
+   the eye is pulled to what actually moved between steps. */
+@keyframes value-land {
+  0% {
+    background-color: rgb(255 176 32 / 0.18);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.value-land {
+  animation: value-land 1.1s ease-out both;
 }
 
 /* A quiet caret that marks "this text just resolved". */

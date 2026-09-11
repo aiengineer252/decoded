@@ -270,9 +270,25 @@ export default function EntryPage() {
         </div>
       </nav>
 
-      <div key={view} className="rise space-y-6">
+      <div key={view} className="rise relative space-y-6">
+        {/* Chapter transition: a numeral sweeps through and a rule wipes
+            across as the new chapter arrives. Makes moving between the four
+            views feel like turning a page rather than swapping a tab. */}
+        <span
+          key={`num-${view}`}
+          aria-hidden
+          className="chapter-numeral pointer-events-none absolute -top-6 right-0 z-0 font-mono text-[9rem] leading-none font-bold text-[var(--amber)] select-none"
+        >
+          {String(index + 1).padStart(2, '0')}
+        </span>
+        <span
+          key={`sweep-${view}`}
+          aria-hidden
+          className="chapter-sweep pointer-events-none absolute -top-2 left-0 z-0 h-px w-full bg-[var(--amber)]"
+        />
+
         {/* chapter opener */}
-        <div className="flex gap-4">
+        <div className="relative z-10 flex gap-4">
           <div className="mt-1 h-auto w-1 shrink-0 rounded-full bg-[var(--amber)] rule-in" style={{ transformOrigin: 'top' }} />
           <div>
             <span className="label">

@@ -27,7 +27,6 @@ const KIND_GLYPH: Record<NodeKind, string> = {
   control: '?',
 }
 
-/** Plain-English name for each box type, for readers who do not know the jargon. */
 const KIND_PLAIN: Record<NodeKind, string> = {
   input: 'where data comes in',
   compute: 'does work on the data',
@@ -45,6 +44,7 @@ export default function ArchitectureView({ architecture }: Props) {
   const { nodes, edges, flow, caption } = architecture
   const { level } = useReadingLevel()
   const [selected, setSelected] = useState<string | null>(null)
+  const [hovered, setHovered] = useState<string | null>(null)
   const [playing, setPlaying] = useState(true)
   const [pulseIdx, setPulseIdx] = useState(0)
   const detailRef = useRef<HTMLDivElement>(null)
@@ -69,6 +69,27 @@ export default function ArchitectureView({ architecture }: Props) {
   const activeId = flow[pulseIdx]
   const prevId = flow[(pulseIdx - 1 + flow.length) % flow.length]
   const selectedNode = selected ? byId.get(selected) : null
+  const flowIndex = (id: string) => flow.indexOf(id)
+
+  /**
+   * Everything one hop from the focused node, in either direction. Used to
+   * recede the rest of the graph so a reader can answer "what does this talk
+   * to" by looking instead of tracing lines by eye.
+   */
+  const focus = useMemo(() => {
+    const id = hovered ?? selected
+    if (!id) return null
+    const keepNodes = new Set<string>([id])
+    const keepEdges = new Set<number>()
+    edges.forEach((e, i) => {
+      if (e.from === id || e.to === id) {
+        keepEdges.add(i)
+        keepNodes.add(e.from)
+        keepNodes.add(e.to)
+      }
+    })
+    return { id, keepNodes, keepEdges }
+  }, [hovered, selected, edges])
 
   const path = (from: ArchNode, to: ArchNode) => {
     const a = pos(from)
@@ -86,11 +107,8 @@ export default function ArchitectureView({ architecture }: Props) {
     return `M ${x0} ${y0} C ${mid} ${y0}, ${mid} ${y1}, ${x1} ${y1}`
   }
 
-  const flowIndex = (id: string) => flow.indexOf(id)
   const isFlowEdge = (fromId: string, toId: string) =>
     flowIndex(fromId) >= 0 && flowIndex(toId) === flowIndex(fromId) + 1
-
-  const stepOf = (id: string) => flowIndex(id)
 
   return (
     <div className="space-y-5">
@@ -109,13 +127,17 @@ export default function ArchitectureView({ architecture }: Props) {
       {level === 'beginner' && (
         <p className="rise rounded-lg border border-[var(--line)] bg-[var(--bg-raised)] px-4 py-3 text-[0.94rem] leading-relaxed text-[var(--txt-dim)]">
           <span className="font-semibold text-[var(--txt)]">How to read this: </span>
-          each box is one part of the system. Data flows left to right along the arrows — the moving
-          dots show the main path. The small number in a box&apos;s corner is its order on that path.
-          Click any box for a plain explanation and, where we have it, the real code.
+          the diagram draws itself in the order data actually moves. Each box is one part of the
+          system; the moving dots follow the main path. Hover a box to see only what it connects to,
+          and click it for a plain explanation and the real code.
         </p>
       )}
 
-      <div className="panel relative overflow-x-auto rounded-lg p-1">
+      <div
+        data-reveal="graph"
+        className="panel relative overflow-x-auto rounded-lg p-1"
+        onMouseLeave={() => setHovered(null)}
+      >
         <svg
           width={width}
           height={height}
@@ -139,23 +161,48 @@ export default function ArchitectureView({ architecture }: Props) {
             const onFlow = isFlowEdge(e.from, e.to)
             const hot = playing && e.from === prevId && e.to === activeId
             const d = path(from, to)
+            const dimmed = focus ? !focus.keepEdges.has(i) : false
+
+            // Edges draw in the order the data travels: an edge that is the
+            // nth hop of the happy path waits for the n-1 hops before it.
+            const order = Math.max(flowIndex(e.from), 0)
+            const delay = 260 + order * 180
+
             return (
-              <g key={i}>
+              <g key={i} className={dimmed ? 'arch-dim' : undefined}>
                 <path
                   d={d}
+                  className="arch-edge"
+                  pathLength={1}
+                  strokeDasharray={1}
+                  style={{ transitionDelay: `${delay}ms` }}
                   fill="none"
                   stroke={hot ? 'var(--amber)' : 'var(--line-hi)'}
                   strokeWidth={hot ? 2.2 : 1.5}
-                  strokeDasharray={e.kind === 'dashed' ? '6 6' : undefined}
                   markerEnd={hot ? 'url(#arrow-hot)' : 'url(#arrow)'}
-                  className={hot ? 'edge-flowing' : undefined}
                   opacity={hot ? 1 : 0.8}
                 />
-                {playing && onFlow && (
+
+                {/* Dashes ride on a second copy so the draw-on transition is
+                    not fighting a dasharray animation on the same element. */}
+                {(hot || e.kind === 'dashed') && (
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={hot ? 'var(--amber)' : 'var(--line-hi)'}
+                    strokeWidth={hot ? 2.2 : 1.5}
+                    strokeDasharray={e.kind === 'dashed' ? '6 6' : undefined}
+                    className={hot ? 'edge-flowing' : undefined}
+                    opacity={hot ? 1 : 0.55}
+                  />
+                )}
+
+                {playing && onFlow && !dimmed && (
                   <circle r={4.5} fill="var(--amber)" opacity={0.95}>
-                    <animateMotion dur="2.4s" repeatCount="indefinite" path={d} begin={`${flowIndex(e.from) * 0.35}s`} />
+                    <animateMotion dur="2.4s" repeatCount="indefinite" path={d} begin={`${order * 0.35}s`} />
                   </circle>
                 )}
+
                 {e.label && (
                   <text
                     className="font-mono"
@@ -178,29 +225,37 @@ export default function ArchitectureView({ architecture }: Props) {
             const color = KIND_COLOR[n.kind]
             const isActive = playing && n.id === activeId
             const isSelected = n.id === selected
+            const isHovered = n.id === hovered
+            const dimmed = focus ? !focus.keepNodes.has(n.id) : false
             const [s1, s2] = wrap2(n.summary, 30)
-            const order = stepOf(n.id)
+            const order = flowIndex(n.id)
+            const delay = 180 + Math.max(order, 0) * 180
+
             return (
               <g
                 key={n.id}
                 transform={`translate(${p.x} ${p.y})`}
+                className={`arch-node${dimmed ? ' arch-dim' : ''}`}
+                style={{ transitionDelay: `${delay}ms` }}
+                onMouseEnter={() => setHovered(n.id)}
                 onClick={() => {
                   setSelected((s) => (s === n.id ? null : n.id))
                   setPlaying(false)
                   setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60)
                 }}
-                style={{ cursor: 'pointer' }}
               >
                 <rect
                   width={W}
                   height={H}
                   rx={8}
                   fill={isSelected ? 'var(--panel-hi)' : 'var(--bg-raised)'}
-                  stroke={isSelected || isActive ? color : 'var(--line-hi)'}
-                  strokeWidth={isSelected ? 2.2 : 1.3}
+                  stroke={isSelected || isActive || isHovered ? color : 'var(--line-hi)'}
+                  strokeWidth={isSelected ? 2.2 : isHovered ? 1.9 : 1.3}
                   style={{
-                    filter: isActive || isSelected ? `drop-shadow(0 0 14px ${color}55)` : undefined,
-                    transition: 'stroke .25s ease, filter .25s ease',
+                    filter:
+                      isActive || isSelected || isHovered ? `drop-shadow(0 0 14px ${color}55)` : undefined,
+                    transition: 'stroke .25s ease, filter .25s ease, stroke-width .25s ease',
+                    cursor: 'pointer',
                   }}
                 />
                 <rect width={4} height={H} rx={2} fill={color} opacity={isSelected ? 1 : 0.8} />
@@ -209,7 +264,6 @@ export default function ArchitectureView({ architecture }: Props) {
                   {KIND_GLYPH[n.kind]} {n.kind.toUpperCase()}
                 </text>
 
-                {/* order badge: where this box sits on the main path */}
                 {order >= 0 && (
                   <g transform={`translate(${W - 26} 9)`}>
                     <rect width={18} height={18} rx={9} fill={isActive ? 'var(--amber)' : 'var(--panel-hi)'} stroke={isActive ? 'var(--amber)' : 'var(--line-hi)'} />
@@ -219,14 +273,14 @@ export default function ArchitectureView({ architecture }: Props) {
                   </g>
                 )}
 
-                <text x={15} y={47} fontSize={15.5} fill="var(--txt)" fontWeight={600}>
+                <text x={15} y={47} fontSize={15.5} fill="var(--txt)" fontWeight={600} style={{ pointerEvents: 'none' }}>
                   {truncate(n.label, 22)}
                 </text>
-                <text x={15} y={69} fontSize={12.5} fill="var(--txt-dim)">{s1}</text>
-                {s2 && <text x={15} y={87} fontSize={12.5} fill="var(--txt-dim)">{s2}</text>}
+                <text x={15} y={69} fontSize={12.5} fill="var(--txt-dim)" style={{ pointerEvents: 'none' }}>{s1}</text>
+                {s2 && <text x={15} y={87} fontSize={12.5} fill="var(--txt-dim)" style={{ pointerEvents: 'none' }}>{s2}</text>}
 
                 {n.code && (
-                  <text x={W - 34} y={H - 12} textAnchor="end" className="font-mono" fontSize={11} fontWeight={700} fill={isSelected ? color : 'var(--txt-faint)'}>
+                  <text x={W - 34} y={H - 12} textAnchor="end" className="font-mono" fontSize={11} fontWeight={700} fill={isSelected ? color : 'var(--txt-faint)'} style={{ pointerEvents: 'none' }}>
                     {'{ }'}
                   </text>
                 )}
@@ -236,7 +290,6 @@ export default function ArchitectureView({ architecture }: Props) {
         </svg>
       </div>
 
-      {/* legend */}
       <div className="flex flex-wrap gap-x-5 gap-y-2">
         {(Object.keys(KIND_COLOR) as NodeKind[])
           .filter((k) => nodes.some((n) => n.kind === k))
@@ -248,11 +301,16 @@ export default function ArchitectureView({ architecture }: Props) {
             </span>
           ))}
         <span className="ml-auto font-mono text-[0.78rem] text-[var(--txt-faint)]">
-          <span className="text-[var(--amber)]">{'{ }'}</span> = real code inside
+          {focus ? (
+            <span className="text-[var(--amber)]">showing connections only</span>
+          ) : (
+            <>
+              <span className="text-[var(--amber)]">{'{ }'}</span> = real code inside
+            </>
+          )}
         </span>
       </div>
 
-      {/* expanded node */}
       <div ref={detailRef}>
         {selectedNode ? (
           <div className="rise space-y-4 rounded-lg border border-[var(--line-hi)] bg-[var(--panel)] p-5">
@@ -294,7 +352,7 @@ export default function ArchitectureView({ architecture }: Props) {
         ) : (
           <div className="rounded-lg border border-dashed border-[var(--line-hi)] px-4 py-8 text-center">
             <p className="font-mono text-[0.9rem] text-[var(--txt-dim)]">
-              <span className="text-[var(--amber)]">&uarr;</span> click any box above to open it — start with{' '}
+              <span className="text-[var(--amber)]">&uarr;</span> hover a box to isolate it, or open{' '}
               <button
                 onClick={() => { setSelected(flow[0]); setPlaying(false) }}
                 className="underline-grow font-semibold text-[var(--amber)]"
@@ -313,7 +371,6 @@ function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s
 }
 
-/** Break a summary into at most two lines of roughly `n` chars on word boundaries. */
 function wrap2(s: string, n: number): [string, string | null] {
   if (s.length <= n) return [s, null]
   const cut = s.lastIndexOf(' ', n)
