@@ -6,6 +6,12 @@ import CodeWalkthrough from '../CodeWalkthrough'
 interface Props {
   trace: ExecutionTrace
   architecture: Architecture
+  /**
+   * True while this chapter owns the viewport. All four chapters are mounted
+   * at once now, so without this the arrow keys would step the trace while
+   * the reader is somewhere else entirely.
+   */
+  active?: boolean
 }
 
 /**
@@ -13,11 +19,22 @@ interface Props {
  * instead of asserting what a system does, it walks a concrete input through
  * it and shows the intermediate value at every stage.
  */
-export default function TraceView({ trace, architecture }: Props) {
+export default function TraceView({ trace, architecture, active = true }: Props) {
   const { level } = useReadingLevel()
   const [step, setStep] = useState(0)
   const [running, setRunning] = useState(false)
+  const [autoStarted, setAutoStarted] = useState(false)
   const last = trace.steps.length - 1
+
+  // Scrolling into this chapter starts the trace running, once. Arriving at a
+  // machine that is already executing is the point of the chapter; a reader
+  // who wants control still has pause and the step buttons.
+  useEffect(() => {
+    if (active && !autoStarted) {
+      setAutoStarted(true)
+      setRunning(true)
+    }
+  }, [active, autoStarted])
 
   const next = useCallback(() => setStep((s) => Math.min(s + 1, last)), [last])
   const prev = useCallback(() => setStep((s) => Math.max(s - 1, 0)), [])
@@ -33,13 +50,16 @@ export default function TraceView({ trace, architecture }: Props) {
   }, [running, step, last, next])
 
   useEffect(() => {
+    if (!active) return
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return
       if (e.key === 'ArrowRight' || e.key === 'j') next()
       if (e.key === 'ArrowLeft' || e.key === 'k') prev()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [next, prev])
+  }, [next, prev, active])
 
   const current = trace.steps[step]
   const node = architecture.nodes.find((n) => n.id === current.nodeId)

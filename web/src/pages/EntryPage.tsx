@@ -1,25 +1,25 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getEntry } from '../data'
 import type { EntryView } from '../types'
 import { GaugeChip } from '../components/Gauge'
-import EntryBrief from '../components/EntryBrief'
-import Freshness from '../components/Freshness'
-import StartHere from '../components/StartHere'
-import DecodeText from '../components/DecodeText'
-import { useReveal } from '../lib/useReveal'
-import { scrollTo } from '../lib/smoothScroll'
 import ArchitectureView from '../components/views/ArchitectureView'
 import TraceView from '../components/views/TraceView'
 import DisplacementView from '../components/views/DisplacementView'
 import VerdictView from '../components/views/VerdictView'
 import { computeScore } from '../lib/credibility'
+import EntryBrief from '../components/EntryBrief'
+import Freshness from '../components/Freshness'
+import StartHere from '../components/StartHere'
+import DecodeText from '../components/DecodeText'
+import { useReveal } from '../lib/useReveal'
+import { useScrollSpy } from '../lib/useScrollSpy'
+import { scrollTo } from '../lib/smoothScroll'
 
 /**
- * The four views are four chapters of one argument, so each carries what the
- * reader is about to learn and what they will know when they finish. The
- * progression is fixed: what it is -> what it does -> what it changes -> whether
- * to trust it. A reader who jumps around still gets the framing.
+ * The four views are four chapters of one argument, and you reach them by
+ * scrolling rather than by clicking tabs. Each carries what you are about to
+ * learn and what you will know when you finish.
  */
 const VIEWS: {
   key: EntryView
@@ -27,15 +27,13 @@ const VIEWS: {
   hint: string
   learn: string
   takeaway: string
-  next: string
 }[] = [
   {
     key: 'architecture',
     label: 'architecture',
     hint: 'what it is made of',
-    learn: 'The parts of the system and how data moves between them. Click a box to open it — each one carries an explanation and, where we have it, a guided walk through the real code.',
+    learn: 'The parts of the system and how data moves between them. The diagram builds itself along the data path — hover a box to see only what it connects to, click it for the real code.',
     takeaway: 'You can now name the parts, and you know which one holds the actual idea.',
-    next: 'Now watch one real input go through it',
   },
   {
     key: 'trace',
@@ -43,7 +41,6 @@ const VIEWS: {
     hint: 'what it does to one real input',
     learn: 'One concrete example pushed through the system, step by step, showing the real data at every stage. This is the chapter that turns "I get the idea" into "I could explain it".',
     takeaway: 'You have seen the mechanism run on a real value, and you know what the numbers look like at each stage.',
-    next: 'Now see what it replaces',
   },
   {
     key: 'displacement',
@@ -51,7 +48,6 @@ const VIEWS: {
     hint: 'what it replaces',
     learn: 'The code you write today next to the code you would write with this, line by line. Then the two lists that matter: what goes away, and what you now pay instead.',
     takeaway: 'You know what this would remove from your stack, what it would not, and what the bill looks like.',
-    next: 'Now the verdict — is it real?',
   },
   {
     key: 'verdict',
@@ -59,49 +55,41 @@ const VIEWS: {
     hint: 'is it real',
     learn: 'Five factors, each with its evidence attached, combined into one score you can recompute — or re-weight — yourself.',
     takeaway: 'You can defend a yes or a no on this with sources, not vibes.',
-    next: '',
   },
 ]
+
+const sectionId = (k: EntryView) => `chapter-${k}`
 
 export default function EntryPage() {
   const { slug } = useParams()
   const entry = slug ? getEntry(slug) : undefined
-  const [view, setView] = useState<EntryView>('architecture')
-  const [seen, setSeen] = useState<Set<EntryView>>(new Set(['architecture']))
 
-  const tabsRef = useRef<HTMLDivElement>(null)
-  const [indicator, setIndicator] = useState({ left: 0, width: 0 })
+  const ids = useMemo(() => VIEWS.map((v) => sectionId(v.key)), [])
+  const active = useScrollSpy(ids, !!entry)
 
-  const index = VIEWS.findIndex((v) => v.key === view)
+  // Chapters the reader has actually arrived at, for the rail's tick marks.
+  const [seen, setSeen] = useState<Set<number>>(() => new Set([0]))
+  useEffect(() => {
+    setSeen((s) => (s.has(active) ? s : new Set(s).add(active)))
+  }, [active])
 
-  const go = (key: EntryView) => {
-    setView(key)
-    setSeen((s) => new Set(s).add(key))
-  }
-
-  // Slide the underline between tabs instead of redrawing it. The movement is
-  // what tells the reader these four are one sequence, not four unrelated tabs.
-  useLayoutEffect(() => {
-    const container = tabsRef.current
-    if (!container) return
-    const el = container.querySelectorAll('button')[index] as HTMLElement | undefined
-    if (!el) return
-    setIndicator({ left: el.offsetLeft, width: el.offsetWidth })
-  }, [index, entry])
-
+  // Number keys jump between chapters — the keyboard equivalent of scrolling.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement | null
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return
       const i = ['1', '2', '3', '4'].indexOf(e.key)
-      if (i >= 0 && !e.metaKey && !e.ctrlKey) go(VIEWS[i].key)
+      if (i >= 0) {
+        const el = document.getElementById(sectionId(VIEWS[i].key))
+        if (el) scrollTo(el, -150)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Re-scan for reveal targets whenever the entry or chapter changes — each
-  // chapter mounts its own content. Must sit above the early return below:
-  // hooks cannot be called conditionally.
-  useReveal([slug, view])
+  useReveal([slug])
 
   if (!entry) {
     return (
@@ -114,11 +102,13 @@ export default function EntryPage() {
     )
   }
 
-  // The stored score must equal the score its own factors produce. If it ever
-  // doesn't, the entry is lying and the page says so rather than hiding it.
   const recomputed = computeScore(entry.verdict.factors)
   const scoreDrift = Math.abs(recomputed - entry.verdict.score) > 1
-  const nextView = VIEWS[index + 1]
+
+  const jump = (i: number) => {
+    const el = document.getElementById(sectionId(VIEWS[i].key))
+    if (el) scrollTo(el, -150)
+  }
 
   return (
     <article className="space-y-7">
@@ -178,16 +168,11 @@ export default function EntryPage() {
             <span className="font-mono font-semibold text-[var(--amber)]">seed entry — </span>
             hand-written to pin down the format before the triage pipeline runs. The mechanism,
             trace and diff describe the real system and every source is linked; the credibility
-            factors are a human judgement, not pipeline output. Entries produced automatically will
-            be labelled <span className="font-mono">auto</span> or{' '}
-            <span className="font-mono">reviewed</span>.
+            factors are a human judgement, not pipeline output.
           </p>
         </div>
       )}
 
-      {/* Defensive: an `auto` entry should never reach the site, because the
-          export step ships reviewed entries only. If one does, the reader is
-          told rather than served unverified output silently. */}
       {entry.status === 'auto' && (
         <div className="rounded-lg border border-[var(--sig-unproven)]/50 bg-[var(--sig-unproven)]/5 px-5 py-4">
           <p className="text-[0.94rem] leading-relaxed text-[var(--txt-dim)]">
@@ -196,7 +181,7 @@ export default function EntryPage() {
             </span>
             this entry is raw pipeline output. No human has checked that the mechanism matches the
             source, that the evidence links support their claims, or that the code was quoted rather
-            than reconstructed. Read it with that in mind.
+            than reconstructed.
           </p>
         </div>
       )}
@@ -215,37 +200,40 @@ export default function EntryPage() {
 
       <EntryBrief entry={entry} />
 
-      <nav className="sticky top-[108px] z-20 -mx-4 border-y border-[var(--line)] bg-[var(--bg)]/95 px-4 backdrop-blur-md sm:-mx-6 sm:px-6">
-        <div ref={tabsRef} className="relative flex gap-1 overflow-x-auto">
+      {/* Chapter rail. No longer a tab bar that swaps content — it reflects
+          where scrolling has taken you, and clicking scrolls you there. */}
+      <nav
+        aria-label="Chapters"
+        className="sticky top-[108px] z-20 -mx-4 border-y border-[var(--line)] bg-[var(--bg)]/95 px-4 backdrop-blur-md sm:-mx-6 sm:px-6"
+      >
+        <div className="relative flex gap-1 overflow-x-auto">
           {VIEWS.map((v, i) => {
-            const active = view === v.key
-            const visited = seen.has(v.key)
+            const isHere = i === active
+            const visited = seen.has(i) && !isHere
             return (
               <button
                 key={v.key}
-                onClick={() => go(v.key)}
+                onClick={() => jump(i)}
+                aria-current={isHere ? 'true' : undefined}
                 className="group relative shrink-0 px-4 py-4 text-left transition-colors"
               >
                 <span className="flex items-baseline gap-2.5">
-                  {/* Zero-padded chapter numeral, wide-tracked — the numbering
-                      convention the reference sites use to make a set of
-                      sections read as one sequence. */}
                   <span
                     className="font-mono text-[0.78rem] font-bold tabular-nums transition-all duration-400"
                     style={{
-                      color: active
+                      color: isHere
                         ? 'var(--amber)'
                         : visited
                           ? 'var(--sig-real)'
                           : 'var(--txt-faint)',
-                      letterSpacing: active ? '0.24em' : '0.14em',
+                      letterSpacing: isHere ? '0.24em' : '0.14em',
                     }}
                   >
                     {String(i + 1).padStart(2, '0')}
                   </span>
                   <span
                     className="font-mono text-[0.94rem] font-bold tracking-wider uppercase transition-colors duration-300"
-                    style={{ color: active ? 'var(--amber)' : 'var(--txt-dim)' }}
+                    style={{ color: isHere ? 'var(--amber)' : 'var(--txt-dim)' }}
                   >
                     {v.label}
                   </span>
@@ -253,118 +241,118 @@ export default function EntryPage() {
                 <span className="mt-1 block pl-7 text-[0.8rem] text-[var(--txt-faint)]">
                   {v.hint}
                 </span>
+                {isHere && (
+                  <span className="rail-marker absolute inset-x-2 -bottom-px h-[3px] rounded-t bg-[var(--amber)] shadow-[0_0_12px_var(--amber)]" />
+                )}
               </button>
             )
           })}
-
-          {/* the sliding indicator */}
-          <span
-            className="pointer-events-none absolute bottom-0 h-[3px] rounded-t bg-[var(--amber)]"
-            style={{
-              left: indicator.left + 8,
-              width: Math.max(indicator.width - 16, 0),
-              transition: 'left .38s cubic-bezier(.22,1,.36,1), width .38s cubic-bezier(.22,1,.36,1)',
-              boxShadow: '0 0 12px var(--amber)',
-            }}
-          />
         </div>
       </nav>
 
-      <div key={view} className="rise relative space-y-6">
-        {/* Chapter transition: a numeral sweeps through and a rule wipes
-            across as the new chapter arrives. Makes moving between the four
-            views feel like turning a page rather than swapping a tab. */}
-        <span
-          key={`num-${view}`}
-          aria-hidden
-          className="chapter-numeral pointer-events-none absolute -top-6 right-0 z-0 font-mono text-[9rem] leading-none font-bold text-[var(--amber)] select-none"
-        >
-          {String(index + 1).padStart(2, '0')}
-        </span>
-        <span
-          key={`sweep-${view}`}
-          aria-hidden
-          className="chapter-sweep pointer-events-none absolute -top-2 left-0 z-0 h-px w-full bg-[var(--amber)]"
-        />
-
-        {/* chapter opener */}
-        <div className="relative z-10 flex gap-4">
-          <div className="mt-1 h-auto w-1 shrink-0 rounded-full bg-[var(--amber)] rule-in" style={{ transformOrigin: 'top' }} />
-          <div>
-            <span className="label">
-              chapter {index + 1} of 4 · in this chapter
-            </span>
-            <p className="mt-1.5 max-w-3xl text-[1.02rem] leading-relaxed text-[var(--txt-dim)]">
-              {VIEWS[index].learn}
-            </p>
-          </div>
-        </div>
-
-        {view === 'architecture' && <ArchitectureView architecture={entry.architecture} />}
-        {view === 'trace' && <TraceView trace={entry.trace} architecture={entry.architecture} />}
-        {view === 'displacement' && <DisplacementView displacement={entry.displacement} />}
-        {view === 'verdict' && <VerdictView verdict={entry.verdict} />}
-
-        {/* chapter close — what the reader now has, before the handoff */}
-        <div className="flex gap-3 rounded-lg border border-[var(--sig-real)]/35 bg-[var(--sig-real)]/5 px-5 py-4">
-          <span className="mt-0.5 font-mono font-bold text-[var(--sig-real)]">x</span>
-          <div>
-            <span className="label" style={{ color: 'var(--sig-real)' }}>
-              you now know
-            </span>
-            <p className="mt-1 text-[0.98rem] leading-relaxed text-[var(--txt)]">{VIEWS[index].takeaway}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Forward motion. Four views only read as one argument if the page
-          actually walks you from one to the next. */}
-      {nextView ? (
-        <button
-          onClick={() => {
-            go(nextView.key)
-            // Through the helper, not window.scrollTo: native `behavior:
-            // 'smooth'` and Lenis both animate scroll and fight each other.
-            scrollTo(260)
-          }}
-          className="lift group flex w-full items-center justify-between rounded-lg border border-[var(--line-hi)] bg-[var(--panel)] px-6 py-5 text-left hover:border-[var(--amber)]"
-        >
-          <span>
-            <span className="label">next</span>
-            <span className="mt-1 block text-[1.15rem] font-semibold text-[var(--txt)]">
-              {VIEWS[index].next}
-            </span>
-          </span>
-          <span className="flex items-center gap-3 font-mono text-[0.94rem] font-bold tracking-wider text-[var(--amber)] uppercase">
-            {nextView.label}
-            <span className="inline-block transition-transform duration-300 group-hover:translate-x-1.5">
-              &rarr;
-            </span>
-          </span>
-        </button>
-      ) : (
-        <Link
-          to="/"
-          className="lift group flex w-full items-center justify-between rounded-lg border border-[var(--line-hi)] bg-[var(--panel)] px-6 py-5 hover:border-[var(--amber)]"
-        >
-          <span>
-            <span className="label">done</span>
-            <span className="mt-1 block text-[1.15rem] font-semibold text-[var(--txt)]">
-              That's the whole breakdown. Next entry?
-            </span>
-          </span>
-          <span className="flex items-center gap-3 font-mono text-[0.94rem] font-bold tracking-wider text-[var(--amber)] uppercase">
-            feed
-            <span className="inline-block transition-transform duration-300 group-hover:translate-x-1.5">
-              &rarr;
-            </span>
-          </span>
-        </Link>
-      )}
-
-      <p className="border-t border-[var(--line)] pt-5 font-mono text-[0.8rem] text-[var(--txt-faint)]">
-        keys: 1–4 switch view · arrow keys step the trace
+      <p className="font-mono text-[0.8rem] text-[var(--txt-faint)]">
+        scroll to move through the four chapters · keys 1–4 jump
       </p>
+
+      {/* The narrative. All four chapters are on the page; scrolling is how
+          you travel through them. */}
+      {VIEWS.map((v, i) => {
+        const isHere = i === active
+        return (
+          <section
+            key={v.key}
+            id={sectionId(v.key)}
+            data-state={isHere ? 'here' : 'away'}
+            className="chapter-section relative scroll-mt-44 border-t border-[var(--line)] pt-8"
+          >
+            {/* the chapter numeral, drifting behind its own content */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -top-2 right-0 z-0 font-mono text-[7.5rem] leading-none font-bold text-[var(--amber)] transition-opacity duration-700 select-none"
+              style={{ opacity: isHere ? 0.09 : 0.03 }}
+            >
+              {String(i + 1).padStart(2, '0')}
+            </span>
+
+            <div className="relative z-10 space-y-6">
+              <div className="flex gap-4">
+                <span
+                  className="chapter-spine mt-1 w-1 shrink-0 rounded-full"
+                  style={{
+                    background: isHere ? 'var(--amber)' : 'var(--line-hi)',
+                    transform: `scaleY(${isHere ? 1 : 0.35})`,
+                  }}
+                />
+                <div>
+                  <span className="label">
+                    chapter {i + 1} of 4 · in this chapter
+                  </span>
+                  <p className="mt-1.5 max-w-3xl text-[1.02rem] leading-relaxed text-[var(--txt-dim)]">
+                    {v.learn}
+                  </p>
+                </div>
+              </div>
+
+              {v.key === 'architecture' && <ArchitectureView architecture={entry.architecture} />}
+              {v.key === 'trace' && (
+                <TraceView trace={entry.trace} architecture={entry.architecture} active={isHere} />
+              )}
+              {v.key === 'displacement' && <DisplacementView displacement={entry.displacement} />}
+              {v.key === 'verdict' && <VerdictView verdict={entry.verdict} />}
+
+              <div className="flex gap-3 rounded-lg border border-[var(--sig-real)]/35 bg-[var(--sig-real)]/5 px-5 py-4">
+                <span className="mt-0.5 font-mono font-bold text-[var(--sig-real)]">x</span>
+                <div>
+                  <span className="label" style={{ color: 'var(--sig-real)' }}>
+                    you now know
+                  </span>
+                  <p className="mt-1 text-[0.98rem] leading-relaxed text-[var(--txt)]">
+                    {v.takeaway}
+                  </p>
+                </div>
+              </div>
+
+              {i < VIEWS.length - 1 && (
+                <button
+                  onClick={() => jump(i + 1)}
+                  className="lift group flex w-full items-center justify-between rounded-lg border border-[var(--line-hi)] bg-[var(--panel)] px-6 py-5 text-left hover:border-[var(--amber)]"
+                >
+                  <span>
+                    <span className="label">keep scrolling</span>
+                    <span className="mt-1 block text-[1.1rem] font-semibold text-[var(--txt)]">
+                      {VIEWS[i + 1].learn.split('.')[0]}.
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-3 font-mono text-[0.94rem] font-bold tracking-wider text-[var(--amber)] uppercase">
+                    {VIEWS[i + 1].label}
+                    <span className="inline-block transition-transform duration-300 group-hover:translate-y-1">
+                      &darr;
+                    </span>
+                  </span>
+                </button>
+              )}
+            </div>
+          </section>
+        )
+      })}
+
+      <Link
+        to="/"
+        className="lift group flex w-full items-center justify-between rounded-lg border border-[var(--line-hi)] bg-[var(--panel)] px-6 py-5 hover:border-[var(--amber)]"
+      >
+        <span>
+          <span className="label">done</span>
+          <span className="mt-1 block text-[1.15rem] font-semibold text-[var(--txt)]">
+            That&apos;s the whole breakdown. Next entry?
+          </span>
+        </span>
+        <span className="flex items-center gap-3 font-mono text-[0.94rem] font-bold tracking-wider text-[var(--amber)] uppercase">
+          feed
+          <span className="inline-block transition-transform duration-300 group-hover:translate-x-1.5">
+            &rarr;
+          </span>
+        </span>
+      </Link>
     </article>
   )
 }

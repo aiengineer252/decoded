@@ -479,6 +479,57 @@ body::before {
   animation: chapter-sweep 0.85s cubic-bezier(0.65, 0, 0.35, 1) both;
 }
 
+/* ===================================================================== *
+ * Chapter sections — the scroll narrative
+ *
+ * Each chapter is a section you arrive at by scrolling. As one enters the
+ * reading line it lifts and sharpens; as it leaves it settles back and
+ * softens, so the page always signals which chapter currently has your
+ * attention.
+ *
+ * Everything here is an *enhancement of* the visible state. A section is
+ * fully readable with no classes applied at all — the same rule that
+ * saved the architecture diagram earlier in this build.
+ * ===================================================================== */
+
+.chapter-section {
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  scroll-margin-top: 190px;
+}
+
+/* Not the chapter you are reading: parked, but still comfortably readable.
+   Deliberately restrained — an aggressive dim looks great in a demo and is
+   hostile the moment the scroll spy lags, or a reader wants to skim ahead.
+   Worst case here is slightly muted body copy, not unreadable text. */
+.chapter-section[data-state='away'] {
+  opacity: 0.72;
+  filter: saturate(0.85);
+  transform: scale(0.996);
+}
+
+.chapter-section[data-state='here'] {
+  opacity: 1;
+  filter: none;
+  transform: none;
+}
+
+/* The rule down the left of a chapter fills as that chapter becomes the
+   active one — a progress spine for the whole entry. */
+.chapter-spine {
+  transition:
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.5s ease;
+  transform-origin: top;
+}
+
+/* The chapter rail's own marker slides between chapters. */
+.rail-marker {
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* A value that has just changed, briefly lit. Used on trace outputs so
    the eye is pulled to what actually moved between steps. */
 @keyframes value-land {
