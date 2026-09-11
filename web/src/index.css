@@ -530,6 +530,170 @@ body::before {
   transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* ===================================================================== *
+ * Scenes — the descent
+ *
+ * Each scene is a full-viewport stop. Scrolling down does not slide a
+ * page past you; the scene you are leaving recedes upward and softens
+ * while the next rises from below and sharpens, so the motion reads as
+ * descending through layers of a system.
+ *
+ * EVERY rule here is gated on [data-scene-state]. That attribute is only
+ * set once the scene tracker is running, so an unarmed page — JS failed,
+ * bundle error, ancient browser — renders as a plain, complete, readable
+ * document. This is the rule the rest of this build learned the hard way.
+ * ===================================================================== */
+
+.scene {
+  transition:
+    opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Waiting below: held slightly back, ready to rise. */
+.scene[data-scene-state='below'] {
+  opacity: 0.55;
+  transform: translate3d(0, 26px, 0) scale(0.985);
+  filter: blur(2px) saturate(0.8);
+}
+
+/* You are here. */
+.scene[data-scene-state='active'] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* Descended past: recedes upward rather than simply fading, so the
+   direction of travel is legible. Kept readable for anyone scrolling
+   back up to re-read something. */
+.scene[data-scene-state='above'] {
+  opacity: 0.6;
+  transform: translate3d(0, -14px, 0) scale(0.992);
+  filter: saturate(0.8);
+}
+
+/* Scene header elements arrive slightly after the scene itself, so the
+   readout "prints" rather than appearing all at once. */
+.scene-head,
+.scene-body {
+  transition:
+    opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.scene[data-scene-state='below'] .scene-head {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+}
+.scene[data-scene-state='below'] .scene-body {
+  opacity: 0;
+  transform: translate3d(0, 22px, 0);
+  transition-delay: 0.08s;
+}
+.scene[data-scene-state='active'] .scene-head,
+.scene[data-scene-state='active'] .scene-body {
+  opacity: 1;
+  transform: none;
+}
+
+/* The rule under a scene title draws itself when the scene goes live. */
+.scene-rule {
+  transform-origin: left;
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.12s;
+}
+.scene[data-scene-state='below'] .scene-rule {
+  transform: scaleX(0);
+}
+.scene[data-scene-state='active'] .scene-rule,
+.scene[data-scene-state='above'] .scene-rule {
+  transform: scaleX(1);
+}
+
+/* Corner brackets: a readout frame, drawn at the corners only. */
+.scene-bracket {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-color: var(--line-hi);
+  opacity: 0;
+  transition:
+    opacity 0.5s ease 0.2s,
+    border-color 0.5s ease;
+  pointer-events: none;
+}
+.scene-bracket-tl {
+  top: 0;
+  left: -12px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+.scene-bracket-br {
+  bottom: 0;
+  right: -12px;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+}
+.scene[data-scene-state='active'] .scene-bracket {
+  opacity: 1;
+  border-color: var(--amber);
+}
+
+/* ===================================================================== *
+ * Depth HUD
+ *
+ * A fixed readout on the left telling you which layer you are on and how
+ * many remain, and letting you jump. Navigation stays explicit — the
+ * point of the choreography is orientation, not mystery.
+ * ===================================================================== */
+
+.hud-tick {
+  transition:
+    background-color 0.35s ease,
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.35s ease;
+}
+
+/* Faint horizontal scanlines over the whole page. Very low contrast —
+   texture, not a filter you have to read through. */
+.scanlines::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.016) 0px,
+    rgb(255 255 255 / 0.016) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* Route change: a thin amber line sweeps down the viewport, the way a
+   scanner passes over something. Purely additive — the new route is
+   already rendering underneath it. */
+@keyframes route-sweep {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+.route-sweep {
+  animation: route-sweep 0.72s cubic-bezier(0.5, 0, 0.2, 1) both;
+}
+
 /* A value that has just changed, briefly lit. Used on trace outputs so
    the eye is pulled to what actually moved between steps. */
 @keyframes value-land {

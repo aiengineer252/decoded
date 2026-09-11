@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Ticker from './components/Ticker'
 import Atmosphere from './components/Atmosphere'
 import ReadingProgress from './components/ReadingProgress'
@@ -7,8 +7,16 @@ import { scrollToTop, startSmoothScroll } from './lib/smoothScroll'
 
 export default function Shell() {
   const { pathname } = useLocation()
+  const [sweepKey, setSweepKey] = useState(0)
 
   useEffect(() => startSmoothScroll(), [])
+
+  // A scanner line passes down the viewport on every route change. Purely
+  // additive: the destination is already rendering underneath it, so a
+  // dropped animation costs nothing but the flourish.
+  useEffect(() => {
+    setSweepKey((k) => k + 1)
+  }, [pathname])
 
   // Route changes jump to top instantly. Going through the smooth-scroll
   // singleton rather than window.scrollTo, because Lenis owns the scroll
@@ -21,7 +29,14 @@ export default function Shell() {
     <>
       <Atmosphere />
 
-      <div className="relative z-10 flex min-h-full flex-col">
+      {/* route-change scanner */}
+      <span
+        key={sweepKey}
+        aria-hidden
+        className="route-sweep pointer-events-none fixed inset-x-0 top-0 z-50 h-[2px] bg-gradient-to-r from-transparent via-[var(--amber)] to-transparent shadow-[0_0_18px_var(--amber)]"
+      />
+
+      <div className="scanlines relative z-10 flex min-h-full flex-col">
         <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-[var(--bg)]/85 backdrop-blur-xl">
           <div className="mx-auto flex max-w-[1280px] items-center gap-6 px-4 py-4 sm:px-6">
             <Link to="/" className="group flex items-baseline gap-2.5">
