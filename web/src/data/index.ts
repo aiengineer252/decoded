@@ -6,6 +6,7 @@ import { contextualRetrieval } from './entries/contextual-retrieval'
 import { hnsw } from './entries/hnsw'
 import { zeroShotClassification } from './entries/zero-shot-classification'
 import { flashAttention } from './entries/flash-attention'
+import { gpt6Astra } from './entries/gpt-6-astra'
 import generated from './generated-entries.json'
 
 /**
@@ -21,6 +22,7 @@ import generated from './generated-entries.json'
  * says so — a truth engine that fakes its own first entries is dead on arrival.
  */
 const seeds: Entry[] = [
+  gpt6Astra,
   flashAttention,
   hnsw,
   contextualRetrieval,
